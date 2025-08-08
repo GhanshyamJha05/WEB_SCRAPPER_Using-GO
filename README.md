@@ -23,7 +23,7 @@ A simple, lightweight web scraper with a modern web UI — built using Go. Scrap
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/web-scraper-go.git
+   git clone https://github.com/GhanshyamJha05/web-scraper-go.git
    cd web-scraper-go
    ```
 
@@ -84,4 +84,4 @@ A simple, lightweight web scraper with a modern web UI — built using Go. Scrap
 
 ## 📝 License
 
-© 2025 [Your Name](https://github.com/GhanshyamJha05)
+© 2025 [Ghanshyam Jha](https://github.com/GhanshyamJha05)
