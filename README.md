@@ -90,33 +90,7 @@ A simple, lightweight web scraper with a modern web UI — built using Go. Scrap
 
 ---
 
-## 🚀 Deployment Options
 
-### Deploy to Render
-1. Fork this repository
-2. Sign up at [Render.com](https://render.com)
-3. Create a new Web Service
-4. Connect your GitHub repository
-5. Use these settings:
-   - Build Command: `go build -o web-scraper`
-   - Start Command: `./web-scraper`
-
-### Deploy to Railway
-1. Sign up at [Railway.app](https://railway.app)
-2. Click "New Project" → "Deploy from GitHub repo"
-3. Select this repository
-4. Railway will auto-detect Go and deploy
-
-### Deploy to Fly.io
-```bash
-# Install flyctl
-curl -L https://fly.io/install.sh | sh
-
-# Login and launch
-fly auth login
-fly launch
-fly deploy
-```
 
 ---
 
