@@ -15,13 +15,13 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.24'
+        go-version: '1.23'
 
     - name: Install dependencies
       run: go mod download
 
     - name: Build
-      run: go build -v -o web-scraper-bin ./...
+      run: go build -v -o web-scraper-bin .
 
     - name: Test
       run: go test -v ./...
