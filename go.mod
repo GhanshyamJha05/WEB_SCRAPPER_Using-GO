@@ -1,6 +1,6 @@
-module github.com/GhanshyamJha05/go-web-scraper
+module github.com/GhanshyamJha05/WEB_SCRAPPER_Using-GO
 
-go 1.24.3
+go 1.23
 
 require github.com/PuerkitoBio/goquery v1.10.3
 
