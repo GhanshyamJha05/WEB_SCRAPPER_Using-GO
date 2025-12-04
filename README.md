@@ -2,7 +2,7 @@
 
 A simple, lightweight web scraper with a modern web UI — built using Go. Scrape content from your favorite websites using CSS selectors and view results in real-time with theme support.
 
-![screenshot-placeholder](https://via.placeholder.com/1000x300?text=Web+Scraper+UI+Preview)
+<img width="1847" height="898" alt="image" src="https://github.com/user-attachments/assets/d44f7683-567e-4119-bb19-916c77249290" />
 
 ---
 
@@ -11,14 +11,14 @@ A simple, lightweight web scraper with a modern web UI — built using Go. Scrap
 - ⚡ Real-time scraping via CSS selectors  
 - 🌐 Predefined sites (e.g., Hacker News, Reddit Golang, GitHub Trending)  
 - 🌙 Dark/Light theme toggle  
-- 📋 Copy selector for quick reuse  
+- � Copay selector for quick reuse  
 - 🧠 Smart fallback for missing selectors  
 - 📜 History of recently scraped URLs  
 - 🛠️ Built with Go and `goquery`  
 
 ---
 
-## 📦 Installation
+## � Insotallation
 
 ### Option 1: Run Locally
 
@@ -132,4 +132,4 @@ fly deploy
 ## 📝 License
 
 MIT License  
-© 2025 [GhanshyamJha05](https://github.com/GhanshyamJha05)
+© 2025 [Ghanshyam Jha](https://github.com/GhanshyamJha05)
