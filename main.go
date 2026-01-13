@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"html/template"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -10,6 +12,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+// Data structures
 type ScrapingSite struct {
 	URL      string
 	Tag      string
@@ -22,56 +25,95 @@ type ScrapeResult struct {
 	Link  string
 }
 
+type PageData struct {
+	URL         string
+	Selector    string
+	Results     []ScrapeResult
+	Duration    time.Duration
+	Error       string
+	Recommended []ScrapingSite
+	Visited     []string
+}
+
+// Global state (Thread-safe)
 var (
-	visitedURLs      []string
-	mu               sync.Mutex
-	recommendedSites = []ScrapingSite{
-		{
-			URL:      "https://news.ycombinator.com",
-			Tag:      "Tech News",
-			Selector: ".titleline > a",
-			Example:  "Hacker News headlines",
-		},
-		{
-			URL:      "https://www.reddit.com/r/golang/",
-			Tag:      "Golang",
-			Selector: "h3._eYtD2XCVieq6emjKBH3m",
-			Example:  "Reddit post titles",
-		},
-		{
-			URL:      "https://github.com/trending",
-			Tag:      "GitHub",
-			Selector: "h2 a",
-			Example:  "Trending repositories",
+	visitedURLs []string
+	mu          sync.Mutex
+	tmpl        *template.Template
+)
+
+var recommendedSites = []ScrapingSite{
+	{
+		URL:      "https://news.ycombinator.com",
+		Tag:      "Tech News",
+		Selector: ".titleline > a",
+		Example:  "Hacker News headlines",
+	},
+	{
+		URL:      "https://www.reddit.com/r/golang/",
+		Tag:      "Golang",
+		Selector: "h3._eYtD2XCVieq6emjKBH3m",
+		Example:  "Reddit post titles",
+	},
+	{
+		URL:      "https://github.com/trending",
+		Tag:      "GitHub",
+		Selector: "h2 a",
+		Example:  "Trending repositories",
+	},
+}
+
+func init() {
+	// Register template functions
+	funcMap := template.FuncMap{
+		"add": func(a, b int) int {
+			return a + b
 		},
 	}
-	currentResults  []ScrapeResult
-	currentURL      string
-	currentSelector string
-	darkMode        = false
-	scrapeDuration  time.Duration
-	resultCount     int
-)
+
+	// Parse templates on startup
+	var err error
+	tmpl, err = template.New("index.html").Funcs(funcMap).ParseFiles("templates/index.html")
+	if err != nil {
+		log.Fatalf("Error parsing template: %v", err)
+	}
+}
 
 func addToVisited(url string) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	for _, u := range visitedURLs {
+	// Check if already exists (move to top?)
+	for i, u := range visitedURLs {
 		if u == url {
+			// Move to top (end of slice in this logic, but displayed reversed)
+			visitedURLs = append(visitedURLs[:i], visitedURLs[i+1:]...)
+			visitedURLs = append(visitedURLs, url)
 			return
 		}
 	}
 
 	visitedURLs = append(visitedURLs, url)
 	if len(visitedURLs) > 10 {
-		visitedURLs = visitedURLs[1:]
+		visitedURLs = visitedURLs[1:] // Keep last 10
 	}
 }
 
-func scrapeWebsite(url string, selector string) ([]ScrapeResult, error) {
-	startTime := time.Now()
+func getVisited() []string {
+	mu.Lock()
+	defer mu.Unlock()
+	// Return a copy to avoid race conditions during read/render
+	copied := make([]string, len(visitedURLs))
+	copy(copied, visitedURLs)
+	// We want to display newest first, so let's reverse the copy or handle in template
+	// Let's reverse it here for the view
+	for i, j := 0, len(copied)-1; i < j; i, j = i+1, j-1 {
+		copied[i], copied[j] = copied[j], copied[i]
+	}
+	return copied
+}
 
+func scrapeWebsite(url string, selector string) ([]ScrapeResult, error) {
 	res, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -90,381 +132,102 @@ func scrapeWebsite(url string, selector string) ([]ScrapeResult, error) {
 	var results []ScrapeResult
 	doc.Find(selector).Each(func(i int, s *goquery.Selection) {
 		title := strings.TrimSpace(s.Text())
+		if title == "" {
+			return
+		}
+		
 		link, _ := s.Attr("href")
-		if !strings.HasPrefix(link, "http") {
+		// Normalize URL
+		if link != "" && !strings.HasPrefix(link, "http") && !strings.HasPrefix(link, "mailto:") {
 			if strings.HasPrefix(link, "/") {
-				link = fmt.Sprintf("%s%s", strings.TrimSuffix(url, "/"), link)
+				// Get root domain
+				// Simple heuristic: trim path from url
+				// Better: use url.Parse, but for now stick to simple logic or improve.
+				// Since 'url' input is full url, we should find the base.
+				// For simplicity, let's just prepend the user provided URL (trimmed)
+				// Or actually, `goquery` doesn't resolve relative URLs automatically.
+				// Let's do a basic fix:
+				
+				// Find base URL (scheme + host)
+				// e.g. https://example.com/foo -> https://example.com
+				parts := strings.Split(url, "/")
+				if len(parts) >= 3 {
+					baseURL := strings.Join(parts[:3], "/")
+					link = baseURL + link
+				} else {
+					// Fallback
+					link = strings.TrimSuffix(url, "/") + link
+				}
 			} else {
 				link = fmt.Sprintf("%s/%s", strings.TrimSuffix(url, "/"), link)
 			}
 		}
+		
 		results = append(results, ScrapeResult{Title: title, Link: link})
 	})
 
-	scrapeDuration = time.Since(startTime)
-	resultCount = len(results)
 	return results, nil
-}
-
-func renderPage(w http.ResponseWriter, r *http.Request) {
-	themeClass := ""
-	if darkMode {
-		themeClass = "dark-theme"
-	}
-
-	fmt.Fprintf(w, `
-	<!DOCTYPE html>
-	<html>
-	<head>
-		<title>Web Scraper</title>
-		<style>
-			:root {
-				--bg-color: #f5f5f5;
-				--text-color: #333;
-				--card-bg: white;
-				--border-color: #ddd;
-				--primary-color: #4CAF50;
-				--secondary-color: #0066cc;
-				--hover-color: #e0e0e0;
-				--input-bg: white;
-			}
-			
-			.dark-theme {
-				--bg-color: #1a1a1a;
-				--text-color: #f0f0f0;
-				--card-bg: #2d2d2d;
-				--border-color: #444;
-				--primary-color: #2E7D32;
-				--secondary-color: #64B5F6;
-				--hover-color: #333;
-				--input-bg: #333;
-			}
-			
-			body {
-				font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-				max-width: 1200px;
-				margin: 0 auto;
-				padding: 20px;
-				background-color: var(--bg-color);
-				color: var(--text-color);
-				transition: all 0.3s ease;
-			}
-			
-			.header {
-				display: flex;
-				justify-content: space-between;
-				align-items: center;
-				margin-bottom: 20px;
-			}
-			
-			.theme-toggle {
-				padding: 8px 15px;
-				background-color: var(--primary-color);
-				color: white;
-				border: none;
-				border-radius: 4px;
-				cursor: pointer;
-				font-weight: bold;
-				transition: background-color 0.2s;
-				display: flex;
-				align-items: center;
-				gap: 8px;
-			}
-			
-			.theme-toggle:hover {
-				background-color: #3e8e41;
-			}
-			
-			.container {
-				display: grid;
-				grid-template-columns: 320px 1fr;
-				gap: 20px;
-			}
-			
-			.sidebar {
-				background-color: var(--card-bg);
-				padding: 20px;
-				border-radius: 8px;
-				box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-			}
-			
-			.results {
-				padding: 20px;
-				background-color: var(--card-bg);
-				border-radius: 8px;
-				box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-			}
-			
-			input[type="text"] {
-				padding: 10px;
-				width: 100%%;
-				margin-bottom: 15px;
-				border: 1px solid var(--border-color);
-				border-radius: 4px;
-				background-color: var(--input-bg);
-				color: var(--text-color);
-			}
-			
-			button {
-				padding: 10px 15px;
-				background-color: var(--primary-color);
-				color: white;
-				border: none;
-				border-radius: 4px;
-				cursor: pointer;
-				width: 100%%;
-				font-weight: bold;
-				transition: background-color 0.2s;
-			}
-			
-			button:hover {
-				background-color: #3e8e41;
-			}
-			
-			.site-card {
-				background-color: var(--bg-color);
-				padding: 15px;
-				margin: 15px 0;
-				border-radius: 6px;
-				transition: transform 0.2s;
-			}
-			
-			.site-card:hover {
-				transform: translateY(-2px);
-			}
-			
-			.tag {
-				display: inline-block;
-				background-color: var(--primary-color);
-				color: white;
-				padding: 3px 8px;
-				border-radius: 12px;
-				font-size: 0.75em;
-				margin-left: 8px;
-			}
-			
-			.result-item {
-				padding: 12px;
-				margin: 8px 0;
-				border-bottom: 1px solid var(--border-color);
-				transition: background-color 0.2s;
-			}
-			
-			.result-item:hover {
-				background-color: var(--hover-color);
-			}
-			
-			.result-item a {
-				color: var(--secondary-color);
-				text-decoration: none;
-			}
-			
-			.result-item a:hover {
-				text-decoration: underline;
-			}
-			
-			h1, h2 {
-				margin-top: 0;
-			}
-			
-			.status {
-				color: var(--text-color);
-				font-style: italic;
-				margin: 15px 0;
-				padding: 10px;
-				background-color: var(--hover-color);
-				border-radius: 4px;
-			}
-			
-			.stats {
-				display: flex;
-				justify-content: space-between;
-				margin-bottom: 15px;
-				font-size: 0.9em;
-				color: var(--text-color);
-			}
-			
-			.copy-btn {
-				background-color: var(--secondary-color);
-				padding: 5px 10px;
-				font-size: 0.8em;
-				width: auto;
-				margin-left: 10px;
-			}
-			
-			.highlight {
-				background-color: rgba(255, 255, 0, 0.3);
-				padding: 2px;
-			}
-		</style>
-	</head>
-	<body class="%s">
-		<div class="header">
-			<h1>Web Scraper</h1>
-			<button class="theme-toggle" onclick="toggleTheme()">
-				<span class="theme-icon">%s</span>
-				<span class="theme-text">%s</span>
-			</button>
-		</div>
-		
-		<div class="container">
-			<div class="sidebar">
-				<h2>Scrape a Website</h2>
-				<form method="GET" action="/">
-					<input type="text" name="url" placeholder="Enter URL" value="%s" required>
-					<input type="text" name="selector" placeholder="CSS Selector" value="%s">
-					<button type="submit">Scrape</button>
-				</form>
-
-				<h2>Recommended Sites</h2>
-				<div class="sites-list">
-	`, themeClass, getThemeIcon(), getThemeText(), currentURL, currentSelector)
-
-	// Display recommended sites
-	for _, site := range recommendedSites {
-		fmt.Fprintf(w, `
-			<div class="site-card">
-				<strong>%s</strong> <span class="tag">%s</span>
-				<p>%s</p>
-				<p><small>Selector: <code class="highlight">%s</code></small></p>
-				<a href="/?url=%s&selector=%s"><button class="copy-btn">Scrape This</button></a>
-			</div>
-		`, site.URL, site.Tag, site.Example, site.Selector, site.URL, site.Selector)
-	}
-
-	fmt.Fprintf(w, `
-				</div>
-
-				<h2>Recently Visited</h2>
-				<ul>
-	`)
-
-	// Display visited URLs (newest first)
-	for i := len(visitedURLs) - 1; i >= 0; i-- {
-		fmt.Fprintf(w, `<li><a href="/?url=%s">%s</a></li>`, visitedURLs[i], visitedURLs[i])
-	}
-
-	fmt.Fprintf(w, `
-				</ul>
-			</div>
-			<div class="results">
-				<h2>Scraping Results</h2>
-	`)
-
-	if currentURL != "" {
-		fmt.Fprintf(w, `
-			<div class="status">
-				<div class="stats">
-					<span>URL: %s</span>
-					<span>Results: %d</span>
-					<span>Time: %v</span>
-				</div>
-				<div class="stats">
-					<span>Selector: <code class="highlight">%s</code></span>
-					<button class="copy-btn" onclick="copyToClipboard('%s')">Copy Selector</button>
-				</div>
-			</div>
-		`, currentURL, resultCount, scrapeDuration.Round(time.Millisecond), currentSelector, currentSelector)
-	}
-
-	// Show scraping results if available
-	if len(currentResults) > 0 {
-		for _, result := range currentResults {
-			fmt.Fprintf(w, `
-				<div class="result-item">
-					<a href="%s" target="_blank">%s</a>
-				</div>
-			`, result.Link, result.Title)
-		}
-	} else if currentURL != "" {
-		fmt.Fprint(w, `<div class="status">No results found for this URL and selector.</div>`)
-	} else {
-		fmt.Fprint(w, `<div class="status">Enter a URL and click "Scrape" to see results.</div>`)
-	}
-
-	fmt.Fprintf(w, `
-			</div>
-		</div>
-		
-		<script>
-			function toggleTheme() {
-				document.body.classList.toggle('dark-theme');
-				const icon = document.querySelector('.theme-icon');
-				const text = document.querySelector('.theme-text');
-				
-				if (document.body.classList.contains('dark-theme')) {
-					icon.textContent = '☀️';
-					text.textContent = 'Light Mode';
-				} else {
-					icon.textContent = '🌙';
-					text.textContent = 'Dark Mode';
-				}
-			}
-			
-			function copyToClipboard(text) {
-				navigator.clipboard.writeText(text)
-					.then(() => alert('Selector copied to clipboard!'))
-					.catch(err => console.error('Could not copy text: ', err));
-			}
-		</script>
-	</body>
-	</html>
-	`)
-}
-
-func getThemeIcon() string {
-	if darkMode {
-		return "☀️"
-	}
-	return "🌙"
-}
-
-func getThemeText() string {
-	if darkMode {
-		return "Light Mode"
-	}
-	return "Dark Mode"
 }
 
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Check for theme toggle
-		if r.URL.Query().Get("theme") == "toggle" {
-			darkMode = !darkMode
+		// Initialize page data
+		data := PageData{
+			Recommended: recommendedSites,
+			Visited:     getVisited(),
 		}
 
 		url := r.URL.Query().Get("url")
 		selector := r.URL.Query().Get("selector")
 
 		if url != "" {
-			currentURL = url
-			currentSelector = selector
+			data.URL = url
+			data.Selector = selector
 			addToVisited(url)
 
-			// Use default selector if not provided
+			// Default selector logic
 			if selector == "" {
 				for _, site := range recommendedSites {
 					if site.URL == url {
-						currentSelector = site.Selector
+						data.Selector = site.Selector
+						selector = site.Selector
 						break
 					}
 				}
 			}
 
-			if currentSelector != "" {
-				results, err := scrapeWebsite(url, currentSelector)
+			if selector != "" {
+				start := time.Now()
+				results, err := scrapeWebsite(url, selector)
+				data.Duration = time.Since(start).Round(time.Millisecond)
+				
 				if err != nil {
-					fmt.Fprintf(w, "Error scraping website: %v", err)
-					return
+					data.Error = fmt.Sprintf("Error scraping: %v", err)
+				} else {
+					data.Results = results
+					if len(results) == 0 {
+						// Don't set error, just empty results is handled by template
+					}
 				}
-				currentResults = results
+			} else {
+				data.Error = "Please provide a CSS selector."
 			}
 		}
 
-		renderPage(w, r)
+		// Re-parse template in dev mode to see changes without restart? 
+		// For production/performance keep the init() one. 
+		// For this user script, let's rely on the init() one but add a fallback if it fails or maybe just use it.
+		// If the user modifies html, they need to restart go run. That's standard.
+		
+		if err := tmpl.Execute(w, data); err != nil {
+			log.Printf("Template execution error: %v", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
 	})
 
 	fmt.Println("Web Scraper running at http://localhost:8080")
 	fmt.Println("Press Ctrl+C to stop")
-	http.ListenAndServe(":8080", nil)
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Fatal(err)
+	}
 }
