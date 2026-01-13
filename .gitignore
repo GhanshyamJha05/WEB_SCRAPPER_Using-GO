@@ -1,0 +1,9 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Temp
+tmp/
+.DS_Store
