@@ -15,6 +15,9 @@ A simple, lightweight web scraper with a modern web UI — built using Go. Scrap
 - 🧠 Smart fallback for missing selectors  
 - 📜 History of recently scraped URLs  
 - 🛠️ Built with Go and `goquery`  
+- 🐳 Multi-stage **Docker** image (distroless, non-root)  
+- 🖥️ **`goscraper` CLI** with optional **Prometheus** `/metrics`  
+- ✅ **GitHub Actions** CI (test, vet, Docker build)  
 
 ---
 
@@ -46,19 +49,57 @@ A simple, lightweight web scraper with a modern web UI — built using Go. Scrap
 
 ### Option 2: Run with Docker
 
-1. **Build the Docker image**
+The `Dockerfile` is **multi-stage**: compiles a static binary, then runs it as a **non-root** user on **gcr.io/distroless/static-debian12**.
+
+1. **Build the image**
    ```bash
-   docker build -t web-scraper .
+   docker build -t web-scraper --build-arg VERSION=$(git rev-parse --short HEAD) .
    ```
 
 2. **Run the container**
    ```bash
-   docker run -p 8080:8080 web-scraper
+   docker run --rm -p 8080:8080 web-scraper
    ```
 
-3. **Access the scraper**
-   Open your browser and visit:  
-   [http://localhost:8080](http://localhost:8080)
+3. Open [http://localhost:8080](http://localhost:8080)
+
+### Option 3: CLI (`goscraper`) + Prometheus metrics
+
+Build the CLI (same module, `cmd/goscraper`):
+
+```bash
+go build -o goscraper ./cmd/goscraper
+```
+
+**Single URL**
+
+```bash
+./goscraper scrape -url https://news.ycombinator.com -selector ".titleline > a"
+./goscraper scrape -url https://example.com -selector "a" -json
+```
+
+**Bulk (JSON output matches the HTTP bulk API)**
+
+```bash
+./goscraper bulk -selector ".titleline > a" https://news.ycombinator.com https://github.com/trending
+./goscraper bulk -selector "h2 a" -f urls.txt
+```
+
+Expose **Prometheus** metrics and Go/process collectors (optional):
+
+```bash
+./goscraper --metrics-listen :9091 bulk -selector ".titleline > a" https://news.ycombinator.com
+# curl http://localhost:9091/metrics
+# curl http://localhost:9091/healthz
+```
+
+Environment variable: `GOSCRAPER_METRICS_LISTEN` (same as `--metrics-listen`).
+
+---
+
+## 🤖 CI/CD
+
+On every push and pull request, GitHub Actions (`.github/workflows/ci.yml`) runs `go vet`, `go test`, builds the server and CLI, and **builds the Docker image** (validation only; image is not pushed by default).
 
 ---
 

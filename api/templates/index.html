@@ -137,18 +137,8 @@
 
                 <section id="bulkResultsCard" class="glass rounded-2xl p-5 hidden-tab">
                     <h3 class="text-xl font-semibold mb-4">Bulk Concurrent Results</h3>
-                    <div class="overflow-x-auto max-h-[28rem]">
-                        <table class="w-full text-sm">
-                            <thead>
-                                <tr class="text-left text-slate-300 border-b border-slate-700">
-                                    <th class="py-2 pr-3">Status</th>
-                                    <th class="py-2 pr-3">Target URL</th>
-                                    <th class="py-2 pr-3">Extracted Data</th>
-                                    <th class="py-2 pr-3">Time (ms)</th>
-                                </tr>
-                            </thead>
-                            <tbody id="bulkResultsBody"></tbody>
-                        </table>
+                    <div id="bulkResultsContainer">
+                        <div class="text-slate-300 text-sm">Run a bulk scrape to render telemetry data.</div>
                     </div>
                 </section>
 
@@ -185,9 +175,9 @@
         const bulkLoading = document.getElementById("bulkLoading");
         const bulkBanner = document.getElementById("bulkBanner");
         const bulkResultsCard = document.getElementById("bulkResultsCard");
+        const bulkResultsContainer = document.getElementById("bulkResultsContainer");
         const bulkTotalTime = document.getElementById("bulkTotalTime");
         const bulkSummary = document.getElementById("bulkSummary");
-        const bulkResultsBody = document.getElementById("bulkResultsBody");
         const resultsPanelTitle = document.getElementById("resultsPanelTitle");
         const resultsEmptyState = document.getElementById("resultsEmptyState");
         const singleResultsList = document.getElementById("singleResultsList");
@@ -258,7 +248,7 @@
             bulkLoading.classList.remove("hidden-tab");
             bulkBanner.classList.add("hidden-tab");
             bulkResultsCard.classList.add("hidden-tab");
-            bulkResultsBody.innerHTML = "";
+            bulkResultsContainer.innerHTML = "";
 
             try {
                 const response = await fetch("/api/bulk-scrape", {
@@ -297,7 +287,21 @@
                     `;
                 }).join("");
 
-                bulkResultsBody.innerHTML = rows;
+                bulkResultsContainer.innerHTML = `
+                    <div class="overflow-x-auto max-h-[28rem]">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="text-left text-slate-300 border-b border-slate-700">
+                                    <th class="py-2 pr-3">Status</th>
+                                    <th class="py-2 pr-3">Target URL</th>
+                                    <th class="py-2 pr-3">Extracted Data</th>
+                                    <th class="py-2 pr-3">Time (ms)</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                `;
                 bulkResultsCard.classList.remove("hidden-tab");
                 bulkHasRun = true;
                 resultsEmptyState.classList.add("hidden-tab");
