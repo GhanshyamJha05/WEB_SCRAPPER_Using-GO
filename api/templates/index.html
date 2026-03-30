@@ -3,514 +3,295 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Go Web Scraper</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>GoScraper Enterprise</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        :root {
-            --bg-color: #0f172a;
-            --surface-color: #1e293b;
-            --surface-hover: #334155;
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --accent-color: #3b82f6;
-            --accent-hover: #2563eb;
-            --border-color: #334155;
-            --success-color: #10b981;
-            --error-color: #ef4444;
-            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-        }
-
-        [data-theme="light"] {
-            --bg-color: #f8fafc;
-            --surface-color: #ffffff;
-            --surface-hover: #f1f5f9;
-            --text-primary: #0f172a;
-            --text-secondary: #64748b;
-            --accent-color: #2563eb;
-            --accent-hover: #1d4ed8;
-            --border-color: #e2e8f0;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-primary);
-            line-height: 1.6;
-            transition: background-color 0.3s, color 0.3s;
+            background: radial-gradient(circle at top left, #1d4ed8 0%, #0f172a 45%, #020617 100%);
             min-height: 100vh;
         }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 2rem;
-            display: grid;
-            grid-template-columns: 350px 1fr;
-            gap: 2rem;
+        .glass {
+            background: rgba(15, 23, 42, 0.58);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.18);
         }
-
-        @media (max-width: 768px) {
-            .container {
-                grid-template-columns: 1fr;
-            }
+        .pill {
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            background: rgba(15, 23, 42, 0.45);
         }
-
-        /* Header */
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 2rem;
-            border-bottom: 1px solid var(--border-color);
-            background-color: var(--surface-color);
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            box-shadow: var(--shadow-md);
-        }
-
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--accent-color);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .theme-toggle {
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            cursor: pointer;
-            padding: 0.5rem;
-            border-radius: 0.5rem;
-            transition: all 0.2s;
-        }
-
-        .theme-toggle:hover {
-            color: var(--text-primary);
-            background-color: var(--surface-hover);
-        }
-
-        /* Sidebar */
-        .sidebar {
-            display: flex;
-            flex-direction: column;
-            gap: 2rem;
-        }
-
-        .card {
-            background-color: var(--surface-color);
-            border-radius: 1rem;
-            padding: 1.5rem;
-            border: 1px solid var(--border-color);
-            box-shadow: var(--shadow-md);
-        }
-
-        h2 {
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            color: var(--text-primary);
-        }
-
-        .form-group {
-            margin-bottom: 1rem;
-        }
-
-        label {
-            display: block;
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            margin-bottom: 0.5rem;
-        }
-
-        input[type="text"] {
-            width: 100%;
-            padding: 0.75rem;
-            border-radius: 0.5rem;
-            background-color: var(--bg-color);
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
-            font-size: 0.95rem;
-            transition: border-color 0.2s;
-        }
-
-        input[type="text"]:focus {
-            outline: none;
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-        }
-
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.5rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-            border: none;
-            gap: 0.5rem;
-            width: 100%;
-        }
-
-        .btn-primary {
-            background-color: var(--accent-color);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background-color: var(--accent-hover);
-            transform: translateY(-1px);
-        }
-
-        .btn-sm {
-            padding: 0.4rem 0.8rem;
-            font-size: 0.8rem;
-            width: auto;
-        }
-
-        .btn-outline {
-            background: transparent;
-            border: 1px solid var(--border-color);
-            color: var(--text-secondary);
-        }
-
-        .btn-outline:hover {
-            border-color: var(--text-secondary);
-            color: var(--text-primary);
-        }
-
-        /* Recommendations */
-        .site-list {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .site-item {
-            padding: 1rem;
-            border-radius: 0.75rem;
-            background-color: var(--bg-color);
-            border: 1px solid var(--border-color);
-            transition: transform 0.2s;
-        }
-
-        .site-item:hover {
-            transform: translateY(-2px);
-            border-color: var(--accent-color);
-        }
-
-        .site-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.5rem;
-        }
-
-        .tag {
-            font-size: 0.7rem;
-            padding: 0.2rem 0.6rem;
-            border-radius: 1rem;
-            background-color: var(--surface-hover);
-            color: var(--accent-color);
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        .code-snippet {
-            font-family: 'Monaco', 'Consolas', monospace;
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            background: rgba(0,0,0,0.2);
-            padding: 0.2rem 0.4rem;
-            border-radius: 0.25rem;
-        }
-
-        [data-theme="light"] .code-snippet {
-            background: rgba(0,0,0,0.05);
-        }
-
-        /* Results */
-        .main-content {
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
-        }
-
-        .status-bar {
-            background-color: var(--surface-color);
-            padding: 1rem;
-            border-radius: 0.75rem;
-            border-left: 4px solid var(--accent-color);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-
-        .stat-item {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .stat-label {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .stat-value {
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .results-grid {
-            display: grid;
-            gap: 1rem;
-        }
-
-        .result-card {
-            background-color: var(--surface-color);
-            padding: 1.25rem;
-            border-radius: 0.75rem;
-            border: 1px solid var(--border-color);
-            display: flex;
-            align-items: flex-start;
-            gap: 1rem;
-            transition: all 0.2s;
-            text-decoration: none;
-            color: inherit;
-        }
-
-        .result-card:hover {
-            border-color: var(--accent-color);
-            background-color: var(--surface-hover);
-        }
-
-        .result-number {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--text-secondary);
-            opacity: 0.3;
-        }
-
-        .result-title {
-            font-size: 1.1rem;
-            font-weight: 500;
-            color: var(--accent-color);
-            margin-bottom: 0.25rem;
-        }
-
-        .result-link {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            word-break: break-all;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 4rem 2rem;
-            color: var(--text-secondary);
-        }
-
-        .empty-icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            opacity: 0.5;
-        }
-
-        .error-banner {
-            background-color: rgba(239, 68, 68, 0.1);
-            color: var(--error-color);
-            padding: 1rem;
-            border-radius: 0.5rem;
-            border: 1px solid var(--error-color);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .loader {
-            display: none;
-            border: 3px solid var(--surface-color);
-            border-top: 3px solid var(--accent-color);
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
+        .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255, 255, 255, 0.25);
+            border-top-color: #fff;
+            border-radius: 999px;
             animation: spin 1s linear infinite;
         }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .hidden-tab {
+            display: none;
         }
-
-        .loading .loader {
-            display: inline-block;
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
-<body>
-    <header>
-        <div class="logo">
-            <span>🕸️</span> GoScraper
-        </div>
-        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle Theme">
-            <span id="theme-icon">☀️</span>
-        </button>
-    </header>
-
-    <div class="container">
-        <aside class="sidebar">
-            <div class="card">
-                <h2>Configure Scrape</h2>
-                <form method="GET" action="/" onsubmit="document.querySelector('.btn-primary').classList.add('loading')">
-                    <div class="form-group">
-                        <label for="url">Target URL</label>
-                        <input type="text" id="url" name="url" placeholder="https://example.com" value="{{.URL}}" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="selector">CSS Selector</label>
-                        <input type="text" id="selector" name="selector" placeholder="e.g. .post-title > a" value="{{.Selector}}">
-                    </div>
-                    <button type="submit" class="btn btn-primary">
-                        <span class="loader"></span>
-                        <span>Start Scrape</span>
-                    </button>
-                </form>
-            </div>
-
-            <div class="card">
-                <h2>Quick Templates</h2>
-                <div class="site-list">
-                    {{range .Recommended}}
-                    <div class="site-item">
-                        <div class="site-header">
-                            <strong>{{.Tag}}</strong>
-                            <span class="tag">Preset</span>
-                        </div>
-                        <p style="font-size: 0.9rem; margin-bottom: 0.5rem;">{{.Example}}</p>
-                        <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.8rem;">
-                            Selector: <span class="code-snippet">{{.Selector}}</span>
-                        </div>
-                        <a href="/?url={{.URL}}&selector={{.Selector}}" class="btn btn-outline btn-sm" style="width: 100%; text-decoration: none; text-align: center;">Load Template</a>
-                    </div>
-                    {{end}}
+<body class="text-slate-100 antialiased">
+    <div class="max-w-7xl mx-auto px-4 py-8 md:px-8">
+        <header class="glass rounded-2xl p-6 mb-6">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                    <p class="text-xs uppercase tracking-[0.2em] text-slate-300">Portfolio Project</p>
+                    <h1 class="text-3xl md:text-4xl font-bold mt-1">GoScraper Enterprise</h1>
+                    <p class="text-slate-300 mt-2">Concurrent worker pool + rate-limited bulk scraping telemetry dashboard.</p>
+                </div>
+                <div class="flex flex-wrap gap-2 text-sm">
+                    <span class="pill rounded-full px-3 py-1">Workers: 6</span>
+                    <span class="pill rounded-full px-3 py-1">Rate Limited</span>
+                    <span class="pill rounded-full px-3 py-1">Goroutines + Channels</span>
                 </div>
             </div>
+        </header>
 
-            {{if .Visited}}
-            <div class="card">
-                <h2>Recent History</h2>
-                <ul style="list-style: none; padding-left: 0;">
-                    {{range .Visited}}
-                    <li style="margin-bottom: 0.8rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
-                        <a href="/?url={{.}}" style="color: var(--text-primary); text-decoration: none; font-size: 0.9rem; word-break: break-all; display: block;">
-                            {{.}}
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <aside class="xl:col-span-1 space-y-6">
+                <section class="glass rounded-2xl p-5">
+                    <h2 class="text-xl font-semibold mb-4">Scrape Controls</h2>
+                    <div class="flex gap-2 mb-4">
+                        <button id="singleTabBtn" type="button" class="tab-btn flex-1 rounded-lg px-3 py-2 text-sm font-medium bg-blue-600">Single</button>
+                        <button id="bulkTabBtn" type="button" class="tab-btn flex-1 rounded-lg px-3 py-2 text-sm font-medium bg-slate-700">Bulk</button>
+                    </div>
+
+                    <div id="singleTab">
+                        <form method="GET" action="/" class="space-y-3">
+                            <div>
+                                <label class="block text-sm text-slate-300 mb-1">Target URL</label>
+                                <input name="url" value="{{.URL}}" placeholder="https://example.com" class="w-full rounded-lg bg-slate-900/70 border border-slate-600 px-3 py-2 outline-none focus:border-blue-400" required />
+                            </div>
+                            <div>
+                                <label class="block text-sm text-slate-300 mb-1">CSS Selector</label>
+                                <input name="selector" value="{{.Selector}}" placeholder=".post-title a" class="w-full rounded-lg bg-slate-900/70 border border-slate-600 px-3 py-2 outline-none focus:border-blue-400" />
+                            </div>
+                            <button class="w-full rounded-lg bg-blue-600 hover:bg-blue-500 transition px-4 py-2 font-semibold">Run Single Scrape</button>
+                        </form>
+                    </div>
+
+                    <div id="bulkTab" class="hidden-tab">
+                        <form id="bulkForm" class="space-y-3">
+                            <div>
+                                <label class="block text-sm text-slate-300 mb-1">URLs (one per line)</label>
+                                <textarea id="bulkUrls" rows="7" placeholder="https://news.ycombinator.com&#10;https://github.com/trending" class="w-full rounded-lg bg-slate-900/70 border border-slate-600 px-3 py-2 outline-none focus:border-blue-400"></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm text-slate-300 mb-1">CSS Selector</label>
+                                <input id="bulkSelector" placeholder=".titleline > a" class="w-full rounded-lg bg-slate-900/70 border border-slate-600 px-3 py-2 outline-none focus:border-blue-400" />
+                            </div>
+                            <button id="bulkSubmitBtn" class="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 transition px-4 py-2 font-semibold inline-flex items-center justify-center gap-2">
+                                <span id="bulkBtnLabel">Start Bulk Scrape</span>
+                                <span id="bulkSpinner" class="spinner hidden"></span>
+                            </button>
+                        </form>
+                    </div>
+                </section>
+
+                <section class="glass rounded-2xl p-5">
+                    <h3 class="text-lg font-semibold mb-3">Quick Templates</h3>
+                    <div class="space-y-3">
+                        {{range .Recommended}}
+                        <div class="rounded-xl border border-slate-700 bg-slate-900/50 p-3">
+                            <div class="flex items-center justify-between">
+                                <p class="font-semibold">{{.Tag}}</p>
+                                <span class="text-xs text-blue-300">Preset</span>
+                            </div>
+                            <p class="text-sm text-slate-300 mt-1">{{.Example}}</p>
+                            <p class="text-xs text-slate-400 mt-2">Selector: <code>{{.Selector}}</code></p>
+                            <a href="/?url={{.URL}}&selector={{.Selector}}" class="inline-block mt-3 text-sm text-blue-300 hover:text-blue-200">Use this template</a>
+                        </div>
+                        {{end}}
+                    </div>
+                </section>
+            </aside>
+
+            <main class="xl:col-span-2 space-y-6">
+                {{if .Error}}
+                <section class="glass rounded-2xl p-4 border border-red-500/60">
+                    <p class="text-red-300 text-sm">{{.Error}}</p>
+                </section>
+                {{end}}
+
+                <section id="bulkBanner" class="glass rounded-2xl p-5 hidden-tab border border-emerald-500/50">
+                    <p class="text-xs uppercase tracking-[0.2em] text-emerald-300">Total Execution Time</p>
+                    <h2 id="bulkTotalTime" class="text-3xl font-bold mt-2">0 ms</h2>
+                    <p id="bulkSummary" class="text-slate-300 mt-2 text-sm"></p>
+                </section>
+
+                <section id="bulkLoading" class="glass rounded-2xl p-6 hidden-tab">
+                    <div class="flex items-center gap-3">
+                        <div class="spinner"></div>
+                        <div>
+                            <p class="font-semibold">Bulk scrape in progress...</p>
+                            <p class="text-sm text-slate-300">Dispatching jobs to worker pool and collecting timed results.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="bulkResultsCard" class="glass rounded-2xl p-5 hidden-tab">
+                    <h3 class="text-xl font-semibold mb-4">Bulk Concurrent Results</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="text-left text-slate-300 border-b border-slate-700">
+                                    <th class="py-2 pr-3">URL</th>
+                                    <th class="py-2 pr-3">Extracted Data</th>
+                                    <th class="py-2 pr-3">Items</th>
+                                    <th class="py-2 pr-3">Time</th>
+                                    <th class="py-2 pr-3">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bulkResultsBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="glass rounded-2xl p-5">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-xl font-semibold">Single Scrape Results</h3>
+                        <span class="text-sm text-slate-300">{{.Duration}}</span>
+                    </div>
+                    {{if .Results}}
+                    <div class="space-y-3">
+                        {{range $i, $r := .Results}}
+                        <a href="{{$r.Link}}" target="_blank" class="block rounded-xl border border-slate-700 bg-slate-900/50 p-3 hover:border-blue-400 transition">
+                            <p class="text-blue-300 font-semibold">{{printf "%02d" (add $i 1)}}. {{$r.Title}}</p>
+                            <p class="text-xs text-slate-400 mt-1 break-all">{{$r.Link}}</p>
                         </a>
-                    </li>
-                    {{end}}
-                </ul>
-            </div>
-            {{end}}
-        </aside>
-
-        <main class="main-content">
-            {{if .Error}}
-            <div class="error-banner">
-                <span>⚠️</span> {{.Error}}
-            </div>
-            {{end}}
-
-            {{if .Results}}
-            <div class="status-bar">
-                <div class="stat-item">
-                    <span class="stat-label">Results Found</span>
-                    <span class="stat-value">{{len .Results}}</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Time Taken</span>
-                    <span class="stat-value">{{.Duration}}</span>
-                </div>
-                <div class="stat-item">
-                    <button class="btn btn-outline btn-sm" onclick="copySelector('{{.Selector}}')">
-                        Copy Selector
-                    </button>
-                </div>
-            </div>
-
-            <div class="results-grid">
-                {{range $i, $r := .Results}}
-                <a href="{{$r.Link}}" target="_blank" class="result-card">
-                    <div class="result-number">{{printf "%02d" (add $i 1)}}</div>
-                    <div>
-                        <div class="result-title">{{$r.Title}}</div>
-                        <div class="result-link">{{$r.Link}}</div>
+                        {{end}}
                     </div>
-                </a>
-                {{end}}
-            </div>
-            {{else}}
-            <div class="empty-state">
-                {{if .URL}}
-                    <div class="empty-icon">🔍</div>
-                    <h3>No results found</h3>
-                    <p>Try adjusting your CSS selector or checking the URL.</p>
-                {{else}}
-                    <div class="empty-icon">👋</div>
-                    <h3>Welcome to GoScraper</h3>
-                    <p>Enter a URL and CSS selector to extract content instantly.</p>
-                {{end}}
-            </div>
-            {{end}}
-        </main>
+                    {{else}}
+                    <div class="text-slate-300 text-sm">
+                        No single-scrape results yet. Use Single mode or run Bulk mode to benchmark concurrency.
+                    </div>
+                    {{end}}
+                </section>
+            </main>
+        </div>
     </div>
 
     <script>
-        // Theme Management
-        function initTheme() {
-            const theme = localStorage.getItem('theme') || 'dark';
-            document.body.setAttribute('data-theme', theme);
-            updateThemeIcon(theme);
+        const singleTabBtn = document.getElementById("singleTabBtn");
+        const bulkTabBtn = document.getElementById("bulkTabBtn");
+        const singleTab = document.getElementById("singleTab");
+        const bulkTab = document.getElementById("bulkTab");
+
+        const bulkForm = document.getElementById("bulkForm");
+        const bulkSpinner = document.getElementById("bulkSpinner");
+        const bulkBtnLabel = document.getElementById("bulkBtnLabel");
+        const bulkLoading = document.getElementById("bulkLoading");
+        const bulkBanner = document.getElementById("bulkBanner");
+        const bulkResultsCard = document.getElementById("bulkResultsCard");
+        const bulkTotalTime = document.getElementById("bulkTotalTime");
+        const bulkSummary = document.getElementById("bulkSummary");
+        const bulkResultsBody = document.getElementById("bulkResultsBody");
+
+        function activateTab(mode) {
+            const isBulk = mode === "bulk";
+            singleTab.classList.toggle("hidden-tab", isBulk);
+            bulkTab.classList.toggle("hidden-tab", !isBulk);
+
+            singleTabBtn.classList.toggle("bg-blue-600", !isBulk);
+            singleTabBtn.classList.toggle("bg-slate-700", isBulk);
+            bulkTabBtn.classList.toggle("bg-emerald-600", isBulk);
+            bulkTabBtn.classList.toggle("bg-slate-700", !isBulk);
         }
 
-        function toggleTheme() {
-            const current = document.body.getAttribute('data-theme');
-            const next = current === 'dark' ? 'light' : 'dark';
-            document.body.setAttribute('data-theme', next);
-            localStorage.setItem('theme', next);
-            updateThemeIcon(next);
+        function escapeHtml(value) {
+            return value
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;");
         }
 
-        function updateThemeIcon(theme) {
-            const icon = document.getElementById('theme-icon');
-            icon.textContent = theme === 'dark' ? '☀️' : '🌙';
-        }
+        singleTabBtn.addEventListener("click", () => activateTab("single"));
+        bulkTabBtn.addEventListener("click", () => activateTab("bulk"));
+        activateTab("single");
 
-        function copySelector(text) {
-            navigator.clipboard.writeText(text).then(() => {
-                const btn = event.target;
-                const originalText = btn.textContent;
-                btn.textContent = 'Copied!';
-                setTimeout(() => btn.textContent = originalText, 2000);
-            });
-        }
+        bulkForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
 
-        document.addEventListener('DOMContentLoaded', initTheme);
+            const urlsRaw = document.getElementById("bulkUrls").value || "";
+            const selector = (document.getElementById("bulkSelector").value || "").trim();
+            const urls = urlsRaw
+                .split("\n")
+                .map((line) => line.trim())
+                .filter((line) => line.length > 0);
+
+            if (!urls.length || !selector) {
+                alert("Please provide URLs and a CSS selector.");
+                return;
+            }
+
+            bulkSpinner.classList.remove("hidden");
+            bulkBtnLabel.textContent = "Running...";
+            bulkLoading.classList.remove("hidden-tab");
+            bulkBanner.classList.add("hidden-tab");
+            bulkResultsCard.classList.add("hidden-tab");
+            bulkResultsBody.innerHTML = "";
+
+            try {
+                const response = await fetch("/api/bulk-scrape", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ urls, selector }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                const payload = await response.json();
+                const total = payload.totalDurationMs || 0;
+                const success = payload.successCount || 0;
+                const failed = payload.failureCount || 0;
+                const workers = payload.workerCount || 0;
+
+                bulkTotalTime.textContent = `${total} ms`;
+                bulkSummary.textContent = `${payload.totalUrls} URLs processed with ${workers} workers (${success} success, ${failed} failed).`;
+                bulkBanner.classList.remove("hidden-tab");
+
+                const rows = (payload.results || []).map((row) => {
+                    const preview = row.error
+                        ? `<span class="text-red-300">${escapeHtml(row.error)}</span>`
+                        : (row.items || []).slice(0, 2).map((item) => {
+                            const title = escapeHtml(item.title || "(empty)");
+                            const link = escapeHtml(item.link || "");
+                            return `<div class="mb-1"><a class="text-blue-300 hover:underline" target="_blank" href="${link}">${title}</a></div>`;
+                        }).join("") || "<span class='text-slate-400'>No extracted items</span>";
+
+                    const status = row.error
+                        ? "<span class='text-red-300'>Failed</span>"
+                        : "<span class='text-emerald-300'>Success</span>";
+
+                    return `
+                        <tr class="border-b border-slate-800 align-top">
+                            <td class="py-3 pr-3 break-all">${escapeHtml(row.url || "")}</td>
+                            <td class="py-3 pr-3">${preview}</td>
+                            <td class="py-3 pr-3">${row.itemCount || 0}</td>
+                            <td class="py-3 pr-3">${row.durationMs || 0} ms</td>
+                            <td class="py-3 pr-3">${status}</td>
+                        </tr>
+                    `;
+                }).join("");
+
+                bulkResultsBody.innerHTML = rows;
+                bulkResultsCard.classList.remove("hidden-tab");
+            } catch (error) {
+                alert(`Bulk scrape failed: ${error.message}`);
+            } finally {
+                bulkSpinner.classList.add("hidden");
+                bulkBtnLabel.textContent = "Start Bulk Scrape";
+                bulkLoading.classList.add("hidden-tab");
+            }
+        });
     </script>
 </body>
 </html>
