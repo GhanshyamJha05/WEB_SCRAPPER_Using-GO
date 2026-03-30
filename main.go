@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -26,20 +28,22 @@ type ScrapingSite struct {
 }
 
 type ScrapeResult struct {
-	Title string
-	Link  string
+	Title string `json:"title"`
+	Link  string `json:"link"`
 }
 
 type ScrapeJob struct {
+	Index    int
 	URL      string
 	Selector string
 }
 
 type JobResult struct {
-	URL      string
-	Selector string
-	Items    []ScrapeResult
-	Err      error
+	Index      int
+	URL        string
+	Items      []ScrapeResult
+	DurationMs int64
+	Err        error
 }
 
 type PageData struct {
@@ -52,17 +56,40 @@ type PageData struct {
 	Visited     []string
 }
 
+type BulkScrapeRequest struct {
+	URLs     []string `json:"urls"`
+	Selector string   `json:"selector"`
+}
+
+type BulkScrapeRow struct {
+	URL        string         `json:"url"`
+	Items      []ScrapeResult `json:"items"`
+	ItemCount  int            `json:"itemCount"`
+	DurationMs int64          `json:"durationMs"`
+	Error      string         `json:"error,omitempty"`
+}
+
+type BulkScrapeResponse struct {
+	TotalURLs       int             `json:"totalUrls"`
+	WorkerCount     int             `json:"workerCount"`
+	SuccessCount    int             `json:"successCount"`
+	FailureCount    int             `json:"failureCount"`
+	TotalDurationMs int64           `json:"totalDurationMs"`
+	Results         []BulkScrapeRow `json:"results"`
+}
+
 // Global state (Thread-safe)
 var (
 	visitedURLs []string
 	mu          sync.Mutex
 	tmpl        *template.Template
+	httpClient  = &http.Client{Timeout: 12 * time.Second}
 )
 
 const (
-	workerCount        = 5
-	requestInterval    = 250 * time.Millisecond
-	maxURLsPerRequest  = 20
+	workerCount       = 6
+	requestInterval   = 200 * time.Millisecond
+	maxURLsPerRequest = 25
 )
 
 var recommendedSites = []ScrapingSite{
@@ -136,8 +163,13 @@ func getVisited() []string {
 	return copied
 }
 
-func scrapeWebsite(url string, selector string) ([]ScrapeResult, error) {
-	res, err := http.Get(url)
+func scrapeWebsite(ctx context.Context, url string, selector string) ([]ScrapeResult, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -178,12 +210,14 @@ func scrapeWebsite(url string, selector string) ([]ScrapeResult, error) {
 func worker(id int, jobs <-chan ScrapeJob, results chan<- JobResult, limiter <-chan time.Time) {
 	for job := range jobs {
 		<-limiter
-		items, err := scrapeWebsite(job.URL, job.Selector)
+		start := time.Now()
+		items, err := scrapeWebsite(context.Background(), job.URL, job.Selector)
 		results <- JobResult{
-			URL:      job.URL,
-			Selector: job.Selector,
-			Items:    items,
-			Err:      err,
+			Index:      job.Index,
+			URL:        job.URL,
+			Items:      items,
+			DurationMs: time.Since(start).Milliseconds(),
+			Err:        err,
 		}
 	}
 }
@@ -249,7 +283,115 @@ func scrapeWithWorkerPool(urls []string, selector string) ([]ScrapeResult, []err
 	return combined, errs
 }
 
+func runBulkScrape(urls []string, selector string) BulkScrapeResponse {
+	start := time.Now()
+	response := BulkScrapeResponse{
+		TotalURLs:   len(urls),
+		WorkerCount: workerCount,
+		Results:     make([]BulkScrapeRow, len(urls)),
+	}
+
+	jobs := make(chan ScrapeJob, len(urls))
+	results := make(chan JobResult, len(urls))
+	limiter := time.NewTicker(requestInterval)
+	defer limiter.Stop()
+
+	activeWorkers := workerCount
+	if len(urls) < activeWorkers {
+		activeWorkers = len(urls)
+	}
+	response.WorkerCount = activeWorkers
+	if activeWorkers == 0 {
+		return response
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < activeWorkers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			worker(workerID, jobs, results, limiter.C)
+		}(i + 1)
+	}
+
+	for i, u := range urls {
+		jobs <- ScrapeJob{Index: i, URL: u, Selector: selector}
+	}
+	close(jobs)
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	for result := range results {
+		row := BulkScrapeRow{
+			URL:        result.URL,
+			Items:      result.Items,
+			ItemCount:  len(result.Items),
+			DurationMs: result.DurationMs,
+		}
+		if result.Err != nil {
+			row.Error = result.Err.Error()
+			response.FailureCount++
+		} else {
+			response.SuccessCount++
+		}
+		response.Results[result.Index] = row
+	}
+
+	response.TotalDurationMs = time.Since(start).Milliseconds()
+	return response
+}
+
+func bulkScrapeAPIHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var payload BulkScrapeRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+		return
+	}
+
+	urls := make([]string, 0, len(payload.URLs))
+	for _, raw := range payload.URLs {
+		u := strings.TrimSpace(raw)
+		if u == "" {
+			continue
+		}
+		urls = append(urls, u)
+	}
+
+	selector := strings.TrimSpace(payload.Selector)
+	if len(urls) == 0 {
+		http.Error(w, "At least one URL is required", http.StatusBadRequest)
+		return
+	}
+	if selector == "" {
+		http.Error(w, "CSS selector is required", http.StatusBadRequest)
+		return
+	}
+	if len(urls) > maxURLsPerRequest {
+		http.Error(w, fmt.Sprintf("Maximum %d URLs allowed per request", maxURLsPerRequest), http.StatusBadRequest)
+		return
+	}
+
+	for _, u := range urls {
+		addToVisited(u)
+	}
+
+	response := runBulkScrape(urls, selector)
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
 func main() {
+	http.HandleFunc("/api/bulk-scrape", bulkScrapeAPIHandler)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// Initialize page data
 		data := PageData{
