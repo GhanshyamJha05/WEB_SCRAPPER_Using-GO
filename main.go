@@ -61,21 +61,16 @@ type BulkScrapeRequest struct {
 	Selector string   `json:"selector"`
 }
 
-type BulkScrapeRow struct {
-	URL        string         `json:"url"`
-	Items      []ScrapeResult `json:"items"`
-	ItemCount  int            `json:"itemCount"`
-	DurationMs int64          `json:"durationMs"`
-	Error      string         `json:"error,omitempty"`
+type BulkScrapeResult struct {
+	URL             string `json:"url"`
+	Data            string `json:"data"`
+	ExecutionTimeMs int64  `json:"execution_time_ms"`
+	Status          string `json:"status"`
 }
 
 type BulkScrapeResponse struct {
-	TotalURLs       int             `json:"totalUrls"`
-	WorkerCount     int             `json:"workerCount"`
-	SuccessCount    int             `json:"successCount"`
-	FailureCount    int             `json:"failureCount"`
-	TotalDurationMs int64           `json:"totalDurationMs"`
-	Results         []BulkScrapeRow `json:"results"`
+	TotalBatchTimeMs int                `json:"total_batch_time_ms"`
+	Results          []BulkScrapeResult `json:"results"`
 }
 
 // Global state (Thread-safe)
@@ -286,9 +281,7 @@ func scrapeWithWorkerPool(urls []string, selector string) ([]ScrapeResult, []err
 func runBulkScrape(urls []string, selector string) BulkScrapeResponse {
 	start := time.Now()
 	response := BulkScrapeResponse{
-		TotalURLs:   len(urls),
-		WorkerCount: workerCount,
-		Results:     make([]BulkScrapeRow, len(urls)),
+		Results: make([]BulkScrapeResult, len(urls)),
 	}
 
 	jobs := make(chan ScrapeJob, len(urls))
@@ -300,7 +293,6 @@ func runBulkScrape(urls []string, selector string) BulkScrapeResponse {
 	if len(urls) < activeWorkers {
 		activeWorkers = len(urls)
 	}
-	response.WorkerCount = activeWorkers
 	if activeWorkers == 0 {
 		return response
 	}
@@ -325,22 +317,26 @@ func runBulkScrape(urls []string, selector string) BulkScrapeResponse {
 	}()
 
 	for result := range results {
-		row := BulkScrapeRow{
-			URL:        result.URL,
-			Items:      result.Items,
-			ItemCount:  len(result.Items),
-			DurationMs: result.DurationMs,
+		extracted := make([]string, 0, len(result.Items))
+		for _, item := range result.Items {
+			if trimmed := strings.TrimSpace(item.Title); trimmed != "" {
+				extracted = append(extracted, trimmed)
+			}
+		}
+		row := BulkScrapeResult{
+			URL:             result.URL,
+			Data:            strings.Join(extracted, " | "),
+			ExecutionTimeMs: result.DurationMs,
+			Status:          "success",
 		}
 		if result.Err != nil {
-			row.Error = result.Err.Error()
-			response.FailureCount++
-		} else {
-			response.SuccessCount++
+			row.Data = result.Err.Error()
+			row.Status = "failed"
 		}
 		response.Results[result.Index] = row
 	}
 
-	response.TotalDurationMs = time.Since(start).Milliseconds()
+	response.TotalBatchTimeMs = int(time.Since(start).Milliseconds())
 	return response
 }
 
