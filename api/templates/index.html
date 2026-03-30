@@ -120,7 +120,7 @@
                 {{end}}
 
                 <section id="bulkBanner" class="glass rounded-2xl p-5 hidden-tab border border-emerald-500/50">
-                    <p class="text-xs uppercase tracking-[0.2em] text-emerald-300">Total Execution Time</p>
+                    <p class="text-xs uppercase tracking-[0.2em] text-emerald-300">Bulk Telemetry Summary</p>
                     <h2 id="bulkTotalTime" class="text-3xl font-bold mt-2">0 ms</h2>
                     <p id="bulkSummary" class="text-slate-300 mt-2 text-sm"></p>
                 </section>
@@ -137,15 +137,14 @@
 
                 <section id="bulkResultsCard" class="glass rounded-2xl p-5 hidden-tab">
                     <h3 class="text-xl font-semibold mb-4">Bulk Concurrent Results</h3>
-                    <div class="overflow-x-auto">
+                    <div class="overflow-x-auto max-h-[28rem]">
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="text-left text-slate-300 border-b border-slate-700">
-                                    <th class="py-2 pr-3">URL</th>
-                                    <th class="py-2 pr-3">Extracted Data</th>
-                                    <th class="py-2 pr-3">Items</th>
-                                    <th class="py-2 pr-3">Time</th>
                                     <th class="py-2 pr-3">Status</th>
+                                    <th class="py-2 pr-3">Target URL</th>
+                                    <th class="py-2 pr-3">Extracted Data</th>
+                                    <th class="py-2 pr-3">Time (ms)</th>
                                 </tr>
                             </thead>
                             <tbody id="bulkResultsBody"></tbody>
@@ -155,11 +154,10 @@
 
                 <section class="glass rounded-2xl p-5">
                     <div class="flex items-center justify-between mb-4">
-                        <h3 class="text-xl font-semibold">Single Scrape Results</h3>
+                        <h3 id="resultsPanelTitle" class="text-xl font-semibold">Single Scrape Results</h3>
                         <span class="text-sm text-slate-300">{{.Duration}}</span>
                     </div>
-                    {{if .Results}}
-                    <div class="space-y-3">
+                    <div id="singleResultsList" class="space-y-3 {{if .Results}}{{else}}hidden-tab{{end}}">
                         {{range $i, $r := .Results}}
                         <a href="{{$r.Link}}" target="_blank" class="block rounded-xl border border-slate-700 bg-slate-900/50 p-3 hover:border-blue-400 transition">
                             <p class="text-blue-300 font-semibold">{{printf "%02d" (add $i 1)}}. {{$r.Title}}</p>
@@ -167,11 +165,9 @@
                         </a>
                         {{end}}
                     </div>
-                    {{else}}
-                    <div class="text-slate-300 text-sm">
+                    <div id="resultsEmptyState" class="text-slate-300 text-sm {{if .Results}}hidden-tab{{end}}">
                         No single-scrape results yet. Use Single mode or run Bulk mode to benchmark concurrency.
                     </div>
-                    {{end}}
                 </section>
             </main>
         </div>
@@ -192,6 +188,10 @@
         const bulkTotalTime = document.getElementById("bulkTotalTime");
         const bulkSummary = document.getElementById("bulkSummary");
         const bulkResultsBody = document.getElementById("bulkResultsBody");
+        const resultsPanelTitle = document.getElementById("resultsPanelTitle");
+        const resultsEmptyState = document.getElementById("resultsEmptyState");
+        const singleResultsList = document.getElementById("singleResultsList");
+        let bulkHasRun = false;
 
         function activateTab(mode) {
             const isBulk = mode === "bulk";
@@ -202,6 +202,29 @@
             singleTabBtn.classList.toggle("bg-slate-700", isBulk);
             bulkTabBtn.classList.toggle("bg-emerald-600", isBulk);
             bulkTabBtn.classList.toggle("bg-slate-700", !isBulk);
+
+            resultsPanelTitle.textContent = isBulk ? "Bulk Scrape Telemetry" : "Single Scrape Results";
+
+            if (isBulk) {
+                if (!bulkHasRun) {
+                    resultsEmptyState.textContent = "Ready to benchmark. Enter multiple URLs to test concurrent worker pool performance.";
+                    resultsEmptyState.classList.remove("hidden-tab");
+                } else {
+                    resultsEmptyState.classList.add("hidden-tab");
+                }
+                singleResultsList.classList.add("hidden-tab");
+            } else {
+                if (singleResultsList.children.length > 0) {
+                    singleResultsList.classList.remove("hidden-tab");
+                    resultsEmptyState.classList.add("hidden-tab");
+                } else {
+                    resultsEmptyState.textContent = "No single-scrape results yet. Use Single mode or run Bulk mode to benchmark concurrency.";
+                    resultsEmptyState.classList.remove("hidden-tab");
+                }
+                bulkBanner.classList.add("hidden-tab");
+                bulkResultsCard.classList.add("hidden-tab");
+                bulkLoading.classList.add("hidden-tab");
+            }
         }
 
         function escapeHtml(value) {
@@ -249,41 +272,35 @@
                 }
 
                 const payload = await response.json();
-                const total = payload.totalDurationMs || 0;
-                const success = payload.successCount || 0;
-                const failed = payload.failureCount || 0;
-                const workers = payload.workerCount || 0;
+                const total = payload.total_batch_time_ms || 0;
+                const results = payload.results || [];
+                const success = results.filter((row) => row.status === "success").length;
+                const failed = results.length - success;
 
                 bulkTotalTime.textContent = `${total} ms`;
-                bulkSummary.textContent = `${payload.totalUrls} URLs processed with ${workers} workers (${success} success, ${failed} failed).`;
+                bulkSummary.textContent = `Total URLs Processed: ${results.length} | Total Batch Execution Time (ms): ${total} | Success: ${success}, Failed: ${failed}`;
                 bulkBanner.classList.remove("hidden-tab");
 
-                const rows = (payload.results || []).map((row) => {
-                    const preview = row.error
-                        ? `<span class="text-red-300">${escapeHtml(row.error)}</span>`
-                        : (row.items || []).slice(0, 2).map((item) => {
-                            const title = escapeHtml(item.title || "(empty)");
-                            const link = escapeHtml(item.link || "");
-                            return `<div class="mb-1"><a class="text-blue-300 hover:underline" target="_blank" href="${link}">${title}</a></div>`;
-                        }).join("") || "<span class='text-slate-400'>No extracted items</span>";
-
-                    const status = row.error
-                        ? "<span class='text-red-300'>Failed</span>"
-                        : "<span class='text-emerald-300'>Success</span>";
+                const rows = results.map((row) => {
+                    const isSuccess = row.status === "success";
+                    const statusIndicator = isSuccess
+                        ? "<span class='text-emerald-300 font-semibold'>✓</span>"
+                        : "<span class='text-red-300 font-semibold'>✕</span>";
 
                     return `
                         <tr class="border-b border-slate-800 align-top">
-                            <td class="py-3 pr-3 break-all">${escapeHtml(row.url || "")}</td>
-                            <td class="py-3 pr-3">${preview}</td>
-                            <td class="py-3 pr-3">${row.itemCount || 0}</td>
-                            <td class="py-3 pr-3">${row.durationMs || 0} ms</td>
-                            <td class="py-3 pr-3">${status}</td>
+                            <td class="py-3 pr-3">${statusIndicator}</td>
+                            <td class="py-3 pr-3 max-w-[16rem] truncate" title="${escapeHtml(row.url || "")}">${escapeHtml(row.url || "")}</td>
+                            <td class="py-3 pr-3">${escapeHtml(row.data || "")}</td>
+                            <td class="py-3 pr-3 font-bold bg-slate-800/60 rounded-md">${row.execution_time_ms || 0}</td>
                         </tr>
                     `;
                 }).join("");
 
                 bulkResultsBody.innerHTML = rows;
                 bulkResultsCard.classList.remove("hidden-tab");
+                bulkHasRun = true;
+                resultsEmptyState.classList.add("hidden-tab");
             } catch (error) {
                 alert(`Bulk scrape failed: ${error.message}`);
             } finally {
