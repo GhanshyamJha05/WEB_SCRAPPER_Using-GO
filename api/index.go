@@ -29,6 +29,18 @@ type ScrapeResult struct {
 	Link  string
 }
 
+type ScrapeJob struct {
+	URL      string
+	Selector string
+}
+
+type JobResult struct {
+	URL      string
+	Selector string
+	Items    []ScrapeResult
+	Err      error
+}
+
 type PageData struct {
 	URL         string
 	Selector    string
@@ -44,6 +56,12 @@ var (
 	visitedURLs []string
 	mu          sync.Mutex
 	tmpl        *template.Template
+)
+
+const (
+	workerCount        = 5
+	requestInterval    = 250 * time.Millisecond
+	maxURLsPerRequest  = 20
 )
 
 var recommendedSites = []ScrapingSite{
@@ -112,6 +130,24 @@ func getVisited() []string {
 	return copied
 }
 
+func resolveLink(base string, link string) string {
+	if link == "" || strings.HasPrefix(link, "http://") || strings.HasPrefix(link, "https://") || strings.HasPrefix(link, "mailto:") {
+		return link
+	}
+
+	parts := strings.Split(base, "/")
+	if len(parts) < 3 {
+		return link
+	}
+
+	root := strings.Join(parts[:3], "/")
+	if strings.HasPrefix(link, "/") {
+		return root + link
+	}
+
+	return strings.TrimSuffix(base, "/") + "/" + link
+}
+
 func scrapeWebsite(url string, selector string) ([]ScrapeResult, error) {
 	res, err := http.Get(url)
 	if err != nil {
@@ -136,24 +172,86 @@ func scrapeWebsite(url string, selector string) ([]ScrapeResult, error) {
 		}
 
 		link, _ := s.Attr("href")
-		if link != "" && !strings.HasPrefix(link, "http") && !strings.HasPrefix(link, "mailto:") {
-			if strings.HasPrefix(link, "/") {
-				parts := strings.Split(url, "/")
-				if len(parts) >= 3 {
-					baseURL := strings.Join(parts[:3], "/")
-					link = baseURL + link
-				} else {
-					link = strings.TrimSuffix(url, "/") + link
-				}
-			} else {
-				link = fmt.Sprintf("%s/%s", strings.TrimSuffix(url, "/"), link)
-			}
-		}
+		link = resolveLink(url, link)
 
 		results = append(results, ScrapeResult{Title: title, Link: link})
 	})
 
 	return results, nil
+}
+
+func worker(id int, jobs <-chan ScrapeJob, results chan<- JobResult, limiter <-chan time.Time) {
+	for job := range jobs {
+		<-limiter
+		items, err := scrapeWebsite(job.URL, job.Selector)
+		results <- JobResult{
+			URL:      job.URL,
+			Selector: job.Selector,
+			Items:    items,
+			Err:      err,
+		}
+	}
+}
+
+func parseURLs(raw string) []string {
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == '\n' || r == '\r' || r == '\t' || r == ' '
+	})
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		u := strings.TrimSpace(p)
+		if u == "" {
+			continue
+		}
+		out = append(out, u)
+	}
+	return out
+}
+
+func scrapeWithWorkerPool(urls []string, selector string) ([]ScrapeResult, []error) {
+	jobs := make(chan ScrapeJob, len(urls))
+	results := make(chan JobResult, len(urls))
+
+	limiter := time.NewTicker(requestInterval)
+	defer limiter.Stop()
+
+	activeWorkers := workerCount
+	if len(urls) < activeWorkers {
+		activeWorkers = len(urls)
+	}
+	if activeWorkers == 0 {
+		return nil, nil
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < activeWorkers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			worker(workerID, jobs, results, limiter.C)
+		}(i + 1)
+	}
+
+	for _, u := range urls {
+		jobs <- ScrapeJob{URL: u, Selector: selector}
+	}
+	close(jobs)
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	combined := make([]ScrapeResult, 0)
+	errs := make([]error, 0)
+	for result := range results {
+		if result.Err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", result.URL, result.Err))
+			continue
+		}
+		combined = append(combined, result.Items...)
+	}
+	return combined, errs
 }
 
 // Handler is the entry point for Vercel
@@ -169,11 +267,30 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if url != "" {
 		data.URL = url
 		data.Selector = selector
-		addToVisited(url)
+		urls := parseURLs(url)
+		if len(urls) == 0 {
+			data.Error = "Please provide at least one valid URL."
+			if err := tmpl.Execute(w, data); err != nil {
+				log.Printf("Template execution error: %v", err)
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			}
+			return
+		}
+		if len(urls) > maxURLsPerRequest {
+			data.Error = fmt.Sprintf("Too many URLs. Maximum allowed per request is %d.", maxURLsPerRequest)
+			if err := tmpl.Execute(w, data); err != nil {
+				log.Printf("Template execution error: %v", err)
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			}
+			return
+		}
+		for _, u := range urls {
+			addToVisited(u)
+		}
 
 		if selector == "" {
 			for _, site := range recommendedSites {
-				if site.URL == url {
+				if site.URL == urls[0] {
 					data.Selector = site.Selector
 					selector = site.Selector
 					break
@@ -183,14 +300,17 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 		if selector != "" {
 			start := time.Now()
-			results, err := scrapeWebsite(url, selector)
+			results, errs := scrapeWithWorkerPool(urls, selector)
 			data.Duration = time.Since(start).Round(time.Millisecond)
 
-			if err != nil {
-				data.Error = fmt.Sprintf("Error scraping: %v", err)
-			} else {
-				data.Results = results
+			if len(errs) > 0 {
+				errStrings := make([]string, 0, len(errs))
+				for _, err := range errs {
+					errStrings = append(errStrings, err.Error())
+				}
+				data.Error = fmt.Sprintf("Completed with %d error(s): %s", len(errs), strings.Join(errStrings, " | "))
 			}
+			data.Results = results
 		} else {
 			data.Error = "Please provide a CSS selector."
 		}
