@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/GhanshyamJha05/WEB_SCRAPPER_Using-GO/internal/scraper"
+	"github.com/GhanshyamJha05/WEB_SCRAPPER_Using-GO/pkg/scraper"
 )
 
 //go:embed templates/index.html
