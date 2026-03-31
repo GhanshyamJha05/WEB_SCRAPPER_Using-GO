@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/GhanshyamJha05/WEB_SCRAPPER_Using-GO/internal/scraper"
+	"github.com/GhanshyamJha05/WEB_SCRAPPER_Using-GO/pkg/scraper"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"

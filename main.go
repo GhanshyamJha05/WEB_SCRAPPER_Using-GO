@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/GhanshyamJha05/WEB_SCRAPPER_Using-GO/internal/scraper"
+	"github.com/GhanshyamJha05/WEB_SCRAPPER_Using-GO/pkg/scraper"
 )
 
 // version is set at link time (e.g. Docker build -ldflags).
