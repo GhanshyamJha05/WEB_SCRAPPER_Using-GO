@@ -1,6 +1,6 @@
 # 🕸️ Web Scraper Using Go
 
-A powerful, lightweight, and concurrent web scraper built with Go. Extract content from any website using CSS selectors through a modern web UI, a robust CLI tool, or a REST API.
+A powerful, lightweight, and concurrent web scraper built with Go. Extract content from any website using CSS selectors through a modern web UI, a robust CLI tool, or a REST API
 
 <img width="930" height="786" alt="image" src="https://github.com/user-attachments/assets/499bf87c-6045-49b7-8bcd-997730185caa" />
 
