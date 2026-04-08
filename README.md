@@ -1,4 +1,4 @@
-# 🕸️ Web Scraper in Go
+# Web Scraper in Go
 
 A powerful, lightweight, and concurrent web scraper built with Go. Extract content from any website using CSS selectors through a modern web UI, a robust CLI tool, or a REST API.
 
@@ -6,28 +6,30 @@ A powerful, lightweight, and concurrent web scraper built with Go. Extract conte
 
 ---
 
-## 🚀 What It Does
+## What It Does
 
 Scrape data from websites efficiently using Go's concurrency primitives. Whether you need headlines from Hacker News, post titles from Reddit, or trending repos from GitHub — this scraper handles it fast.
 
-- **Worker Pool**: Configurable number of goroutines drain a shared jobs channel concurrently.
-- **Rate Limiting**: Global `RateLimit` (req/s) prevents hammering target servers — one shared ticker across all workers.
-- **Modular Structure**: Clean `cmd/` / `pkg/` / `internal/` layout — each layer has a single responsibility.
+- **Worker Pool**: Configurable goroutines drain a shared jobs channel concurrently.
+- **Rate Limiting**: Global `RateLimit` (req/s) — one shared ticker across all workers.
+- **Retry + Backoff**: Failed requests retry up to 3 times with exponential backoff.
+- **Modular Structure**: Clean `cmd/` / `pkg/` / `internal/` layout.
 - **Web Interface**: Responsive dashboard with dark/light mode, history, and recommended sites.
 - **CLI**: `goscraper` command with single and bulk scrape modes + optional Prometheus metrics.
 - **REST API**: JSON bulk scraping endpoint, deployable to Vercel.
 
 ---
 
-## � Project Structure
+## Project Structure
 
 ```
 .
-├── cmd/goscraper/       # CLI binary entrypoint (thin main, flags → pkg/scraper)
+├── cmd/goscraper/       # CLI binary entrypoint (thin main, flags -> pkg/scraper)
 ├── pkg/scraper/         # Reusable scraping engine (public API)
-│   ├── scraper.go       # Client, Config, fetch logic, ScrapeWithWorkerPool, RunBulkScrape
+│   ├── scraper.go       # Client, Config, fetch, ScrapeWithWorkerPool, RunBulkScrape
 │   ├── pool.go          # Worker pool primitive (goroutines + channels)
-│   └── ratelimiter.go   # Rate limiter (time.Ticker, configurable req/s)
+│   ├── ratelimiter.go   # Rate limiter (time.Ticker, configurable req/s)
+│   └── retry.go         # Retry logic with exponential backoff
 ├── internal/server/     # HTTP handler logic (not importable externally)
 │   └── server.go        # Handler, PageData, routing, visited URL state
 ├── api/
@@ -36,32 +38,54 @@ Scrape data from websites efficiently using Go's concurrency primitives. Whether
 └── main.go              # Standalone HTTP server entrypoint (~30 lines)
 ```
 
-**Why this layout?**
 - `pkg/` — importable by anyone, including external projects.
 - `internal/` — app-specific logic the Go toolchain prevents external packages from importing.
 - `cmd/` — binary entrypoints only; stays thin by delegating to `pkg/` and `internal/`.
 
 ---
 
-## ⚙️ Concurrency Design
+## Concurrency Design
 
 ```
-RateLimit = 5.0  →  interval = 1s / 5 = 200ms
+RateLimit = 5.0  ->  interval = 1s / 5 = 200ms
 
 tick  tick  tick  tick  tick   (one every 200ms)
-  │     │     │     │     │
+  |     |     |     |     |
 worker1 worker3 worker2 worker1 worker4
 ```
 
-Workers compete to pull jobs from an unbuffered channel (natural backpressure). Before each request, every worker calls `rl.wait()` on a shared `rateLimiter` — so global throughput is capped at `RateLimit` req/s regardless of worker count.
+Workers compete to pull jobs from an unbuffered channel (natural backpressure). Before each request every worker calls `rl.wait()` on a shared `rateLimiter` — global throughput is capped at `RateLimit` req/s regardless of worker count.
 
 ---
 
-## �️ How to Run
+## Retry Logic
+
+Failed requests are automatically retried with exponential backoff:
+
+```
+attempt 0  fails  ->  wait 300ms
+attempt 1  fails  ->  wait 600ms
+attempt 2  fails  ->  wait 1200ms
+attempt 3  fails  ->  return error
+```
+
+| Condition | Retried? |
+|---|---|
+| Network error / timeout | yes |
+| HTTP 429 Too Many Requests | yes (honours `Retry-After` header) |
+| HTTP 5xx server error | yes |
+| HTTP 4xx (except 429) | no |
+| HTTP 200 | no |
+
+Configurable per client via `MaxRetries` and `BaseRetryDelay` in `Config`.
+
+---
+
+## How to Run
 
 ### Prerequisites
-- **Go 1.23+**
-- (Optional) **Docker**
+- Go 1.23+
+- (Optional) Docker
 
 ### Local Setup
 ```bash
@@ -73,7 +97,7 @@ go mod tidy
 ### Web Server
 ```bash
 go run main.go
-# → http://localhost:8080
+# -> http://localhost:8080
 ```
 
 ### CLI
@@ -105,14 +129,16 @@ docker run --rm -p 8080:8080 web-scraper
 
 ---
 
-## 🔧 Configuration
+## Configuration
 
 ```go
 cli := scraper.NewClient(scraper.Config{
-    WorkerCount:       6,     // concurrent goroutines
-    RateLimit:         5.0,   // max requests/sec across all workers
-    MaxURLsPerRequest: 25,    // hard cap per API/CLI call
+    WorkerCount:       6,
+    RateLimit:         5.0,                  // max requests/sec across all workers
+    MaxURLsPerRequest: 25,
     HTTPTimeout:       12 * time.Second,
+    MaxRetries:        3,                    // retry up to 3 times on failure
+    BaseRetryDelay:    300 * time.Millisecond, // 300ms -> 600ms -> 1200ms
 })
 ```
 
@@ -122,10 +148,12 @@ cli := scraper.NewClient(scraper.Config{
 | `RateLimit` | `5.0` | Max requests per second (global) |
 | `MaxURLsPerRequest` | `25` | URL cap per scrape call |
 | `HTTPTimeout` | `12s` | Per-request HTTP timeout |
+| `MaxRetries` | `3` | Max retry attempts on failure |
+| `BaseRetryDelay` | `300ms` | Initial backoff delay (doubles each attempt) |
 
 ---
 
-## � Sample Output
+## Sample Output
 
 ### CLI (JSON)
 ```json
@@ -152,7 +180,7 @@ cli := scraper.NewClient(scraper.Config{
 
 ---
 
-## ✨ Recommended Sites
+## Recommended Sites
 
 | Site | Tag | CSS Selector |
 |---|---|---|
@@ -162,7 +190,7 @@ cli := scraper.NewClient(scraper.Config{
 
 ---
 
-## 🧰 Built With
+## Built With
 
 - [Go](https://golang.org/) — backend, CLI, concurrency
 - [goquery](https://github.com/PuerkitoBio/goquery) — CSS selector parsing
@@ -171,6 +199,6 @@ cli := scraper.NewClient(scraper.Config{
 
 ---
 
-## 📝 License
+## License
 
 MIT License — © 2025 [Ghanshyam Jha](https://github.com/GhanshyamJha05)
