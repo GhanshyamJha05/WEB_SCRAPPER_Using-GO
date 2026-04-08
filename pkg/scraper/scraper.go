@@ -60,18 +60,22 @@ type BulkScrapeResponse struct {
 // Config holds tunables for the worker pool and HTTP client.
 type Config struct {
 	WorkerCount       int           // number of concurrent worker goroutines
-	RateLimit         float64       // maximum requests per second across all workers (e.g. 5 = 5 req/s)
+	RateLimit         float64       // maximum requests per second across all workers
 	MaxURLsPerRequest int           // hard cap on URLs per call
 	HTTPTimeout       time.Duration // per-request HTTP timeout
+	MaxRetries        int           // max retry attempts on failure (0 = no retries)
+	BaseRetryDelay    time.Duration // initial backoff delay; doubles each attempt
 }
 
 // DefaultConfig returns sensible production defaults.
 func DefaultConfig() Config {
 	return Config{
 		WorkerCount:       6,
-		RateLimit:         5, // 5 req/s → one request every 200ms globally
+		RateLimit:         5,
 		MaxURLsPerRequest: 25,
 		HTTPTimeout:       12 * time.Second,
+		MaxRetries:        3,
+		BaseRetryDelay:    300 * time.Millisecond,
 	}
 }
 
@@ -95,6 +99,12 @@ func NewClient(cfg Config) *Client {
 	if cfg.MaxURLsPerRequest <= 0 {
 		cfg.MaxURLsPerRequest = 25
 	}
+	if cfg.MaxRetries <= 0 {
+		cfg.MaxRetries = 3
+	}
+	if cfg.BaseRetryDelay <= 0 {
+		cfg.BaseRetryDelay = 300 * time.Millisecond
+	}
 	return &Client{
 		httpClient: &http.Client{Timeout: cfg.HTTPTimeout},
 		cfg:        cfg,
@@ -106,16 +116,20 @@ func (c *Client) MaxURLs() int { return c.cfg.MaxURLsPerRequest }
 
 // --- Core fetch logic ---
 
-// fetch performs a single HTTP GET, parses the HTML, and returns matched elements.
+// fetch performs an HTTP GET with automatic retry + exponential backoff.
+// It retries on network errors, timeouts, 429, and 5xx responses (up to maxRetries).
 // This is the fetchFn passed to the worker pool.
 func (c *Client) fetch(ctx context.Context, pageURL, selector string) ([]ScrapeResult, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	res, err := c.httpClient.Do(req)
+
+	res, err := withRetry(c.cfg.MaxRetries, c.cfg.BaseRetryDelay, func() (*http.Response, error) {
+		return c.httpClient.Do(req)
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s: %w", pageURL, err)
 	}
 	defer res.Body.Close()
 
