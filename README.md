@@ -46,12 +46,14 @@ The server will start at [http://localhost:8080](http://localhost:8080).
 # Build the CLI
 go build -o goscraper ./cmd/goscraper
 
-# Single URL scrape
-./goscraper scrape -url https://news.ycombinator.com -selector ".titleline > a"
+# Scrape URLs from a file, print JSON to stdout
+./goscraper --input urls.txt --selector ".titleline > a"
 
-# Bulk scrape (JSON output)
-./goscraper bulk -selector "h2 a" https://github.com/trending https://news.ycombinator.com
+# Control concurrency and write output to a file
+./goscraper --input urls.txt --selector ".titleline > a" --workers 8 --output results.json
 ```
+
+> See [CLI_USAGE.md](./CLI_USAGE.md) for the full reference.
 
 ### 5. Running with Docker
 ```bash
@@ -193,21 +195,14 @@ go run main.go
 # Build
 go build -o goscraper ./cmd/goscraper
 
-# Single URL
-./goscraper scrape -url https://news.ycombinator.com -selector ".titleline > a"
+# Scrape a list of URLs, print JSON to stdout
+./goscraper --input urls.txt --selector ".titleline > a"
 
-# Single URL — JSON output
-./goscraper scrape -url https://news.ycombinator.com -selector ".titleline > a" -json
-
-# Bulk scrape
-./goscraper bulk -selector "h2 a" https://github.com/trending https://news.ycombinator.com
-
-# Bulk from file
-./goscraper bulk -selector ".titleline > a" -f urls.txt
-
-# With Prometheus metrics
-./goscraper --metrics-listen :9091 scrape -url https://news.ycombinator.com -selector ".titleline > a"
+# Custom worker count + write to file
+./goscraper --input urls.txt --selector ".titleline > a" --workers 8 --output results.json
 ```
+
+> Full flag reference and examples: [CLI_USAGE.md](./CLI_USAGE.md)
 
 ### Docker
 ```bash
