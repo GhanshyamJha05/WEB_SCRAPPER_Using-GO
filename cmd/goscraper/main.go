@@ -60,18 +60,26 @@ func main() {
 	cli := scraper.NewClient(cfg)
 	results, errs := cli.ScrapeWithWorkerPool(urls, *selector)
 
+	// Print per-URL warnings to stderr so they don't pollute stdout/file output.
 	for _, e := range errs {
 		fmt.Fprintf(os.Stderr, "warn: %v\n", e)
 	}
 
-	if err := writeOutput(*output, results); err != nil {
+	out := scraper.NewScrapeOutput(urls, *selector, *workers, results, errs)
+
+	if err := writeOutput(*output, out); err != nil {
 		fmt.Fprintf(os.Stderr, "error writing output: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Confirm save location when writing to a file (not stdout).
+	if *output != "" {
+		fmt.Fprintf(os.Stderr, "saved %d result(s) to %s\n", len(results), *output)
 	}
 }
 
 // readURLs reads a file and returns non-empty, non-comment lines as URLs.
-// It strips a leading UTF-8 BOM if present.
+// It strips a leading UTF-8 BOM if present (written by some Windows editors).
 func readURLs(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -85,7 +93,6 @@ func readURLs(path string) ([]string, error) {
 	for sc.Scan() {
 		line := sc.Text()
 		if first {
-			// strip UTF-8 BOM (EF BB BF) written by some editors
 			line = strings.TrimPrefix(line, "\xef\xbb\xbf")
 			first = false
 		}
@@ -98,19 +105,13 @@ func readURLs(path string) ([]string, error) {
 	return urls, sc.Err()
 }
 
-// writeOutput encodes results as indented JSON to a file or stdout.
-func writeOutput(path string, results []scraper.ScrapeResult) error {
-	w := os.Stdout
+// writeOutput writes the ScrapeOutput as indented JSON.
+// If path is empty it writes to stdout; otherwise it delegates to SaveJSON.
+func writeOutput(path string, out scraper.ScrapeOutput) error {
 	if path != "" {
-		f, err := os.Create(path)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		w = f
+		return out.SaveJSON(path)
 	}
-
-	enc := json.NewEncoder(w)
+	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	return enc.Encode(results)
+	return enc.Encode(out)
 }
