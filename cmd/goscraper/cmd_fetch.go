@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/GhanshyamJha05/WEB_SCRAPPER_Using-GO/internal/ui"
@@ -34,11 +33,10 @@ func init() {
 	_ = fetchCmd.MarkFlagRequired("selector")
 }
 
-func runFetch(cmd *cobra.Command, _ []string) error {
+func runFetch(_ *cobra.Command, _ []string) error {
 	ui.Header("fetch")
 	ui.Config("url", fetchURL)
 	ui.Config("selector", fetchSelector)
-	ui.Config("workers", fmt.Sprintf("%d", fetchWorkers))
 	if fetchOutput != "" {
 		ui.Config("output", fetchOutput)
 	}
@@ -49,17 +47,22 @@ func runFetch(cmd *cobra.Command, _ []string) error {
 	cfg.WorkerCount = fetchWorkers
 	cli := scraper.NewClient(cfg)
 
+	// Single URL goes through the same ScrapeStreamed pipeline as run —
+	// no special-casing, no duplicated logic.
 	start := time.Now()
-	results, errs := cli.ScrapeWithWorkerPool([]string{fetchURL}, fetchSelector)
+	var results []scraper.ScrapeResult
+	var errs []error
+
+	for r := range cli.ScrapeStreamed([]string{fetchURL}, fetchSelector) {
+		if r.Err != nil {
+			errs = append(errs, r.Err)
+		} else {
+			results = append(results, r.Items...)
+		}
+		ui.Progress(1, 1, r.URL, len(r.Items), r.DurationMs, r.Err)
+	}
 	elapsed := time.Since(start).Seconds()
 
-	// Single URL — always [1/1]
-	var fetchErr error
-	if len(errs) > 0 {
-		fetchErr = errs[0]
-	}
-	durationMs := int64(time.Since(start).Milliseconds())
-	ui.Progress(1, 1, fetchURL, len(results), durationMs, fetchErr)
 	ui.Done(len(results), len(errs), elapsed)
 
 	for _, e := range errs {

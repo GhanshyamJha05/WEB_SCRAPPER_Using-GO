@@ -34,7 +34,7 @@ func init() {
 	_ = runCmd.MarkFlagRequired("selector")
 }
 
-func runRun(cmd *cobra.Command, _ []string) error {
+func runRun(_ *cobra.Command, _ []string) error {
 	urls, err := readURLs(runFile)
 	if err != nil {
 		ui.Fatal("failed to read input file: " + err.Error())
@@ -57,24 +57,22 @@ func runRun(cmd *cobra.Command, _ []string) error {
 	cfg.WorkerCount = runWorkers
 	cli := scraper.NewClient(cfg)
 
-	// Scrape each URL individually so we can show per-URL progress.
+	// All URLs are submitted to the pool at once — true concurrent scraping.
+	// Results stream back as each worker finishes, so ui.Progress fires immediately.
 	total := len(urls)
 	var allResults []scraper.ScrapeResult
 	var allErrs []error
+	n := 0
 
 	start := time.Now()
-	for i, u := range urls {
-		t0 := time.Now()
-		results, errs := cli.ScrapeWithWorkerPool([]string{u}, runSelector)
-		durationMs := time.Since(t0).Milliseconds()
-
-		var urlErr error
-		if len(errs) > 0 {
-			urlErr = errs[0]
-			allErrs = append(allErrs, errs...)
+	for r := range cli.ScrapeStreamed(urls, runSelector) {
+		n++
+		if r.Err != nil {
+			allErrs = append(allErrs, r.Err)
+		} else {
+			allResults = append(allResults, r.Items...)
 		}
-		allResults = append(allResults, results...)
-		ui.Progress(i+1, total, u, len(results), durationMs, urlErr)
+		ui.Progress(n, total, r.URL, len(r.Items), r.DurationMs, r.Err)
 	}
 	elapsed := time.Since(start).Seconds()
 
