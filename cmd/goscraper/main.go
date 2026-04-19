@@ -1,85 +1,72 @@
-// Command goscraper is a CLI for scraping URLs with a CSS selector.
-//
-// Usage:
-//
-//	goscraper --input urls.txt --selector ".title a" [--workers 8] [--output results.json]
 package main
 
 import (
 	"bufio"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/GhanshyamJha05/WEB_SCRAPPER_Using-GO/internal/ui"
 	"github.com/GhanshyamJha05/WEB_SCRAPPER_Using-GO/pkg/scraper"
+	"github.com/spf13/cobra"
 )
 
+var version = "dev"
+
+var rootCmd = &cobra.Command{
+	Use:     "goscraper",
+	Version: version,
+	Short:   "a minimal web scraping CLI",
+	Long: `A minimal web scraping CLI.
+
+  Available commands:
+    fetch      scrape a single URL
+    run        scrape multiple URLs from a file
+    discover   list links from a page
+
+Use "goscraper [command] --help" for more information.`,
+	// Don't show usage on every error — only on flag parse failures.
+	SilenceUsage: true,
+	// Let RunE return errors without cobra printing them (we handle it).
+	SilenceErrors: true,
+}
+
+var (
+	flagVerbose bool
+	flagQuiet   bool
+)
+
+func init() {
+	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, "show detailed output including per-URL timing")
+	rootCmd.PersistentFlags().BoolVarP(&flagQuiet, "quiet", "q", false, "suppress all output except errors and saved path")
+
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		switch {
+		case flagVerbose:
+			ui.Active = ui.ModeVerbose
+		case flagQuiet:
+			ui.Active = ui.ModeQuiet
+		default:
+			ui.Active = ui.ModeNormal
+		}
+	}
+
+	rootCmd.AddCommand(fetchCmd)
+	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(discoverCmd)
+}
+
 func main() {
-	input := flag.String("input", "", "Path to file with one URL per line (required)")
-	selector := flag.String("selector", "", "CSS selector to extract (required)")
-	workers := flag.Int("workers", 6, "Number of concurrent worker goroutines")
-	output := flag.String("output", "", "Write JSON results to this file (default: stdout)")
-
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "goscraper — concurrent web scraper\n\n")
-		fmt.Fprintf(os.Stderr, "Usage:\n")
-		fmt.Fprintf(os.Stderr, "  goscraper --input <file> --selector <css> [--workers N] [--output <file>]\n\n")
-		fmt.Fprintf(os.Stderr, "Flags:\n")
-		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nExample:\n")
-		fmt.Fprintf(os.Stderr, "  goscraper --input urls.txt --selector \".titleline > a\" --workers 8 --output out.json\n")
-	}
-
-	flag.Parse()
-
-	if *input == "" || *selector == "" {
-		fmt.Fprintln(os.Stderr, "error: --input and --selector are required")
-		flag.Usage()
-		os.Exit(1)
-	}
-	if *workers < 1 {
-		fmt.Fprintln(os.Stderr, "error: --workers must be >= 1")
-		os.Exit(1)
-	}
-
-	urls, err := readURLs(*input)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error reading input: %v\n", err)
-		os.Exit(1)
-	}
-	if len(urls) == 0 {
-		fmt.Fprintln(os.Stderr, "error: no URLs found in input file")
-		os.Exit(1)
-	}
-
-	cfg := scraper.DefaultConfig()
-	cfg.WorkerCount = *workers
-
-	cli := scraper.NewClient(cfg)
-	results, errs := cli.ScrapeWithWorkerPool(urls, *selector)
-
-	// Print per-URL warnings to stderr so they don't pollute stdout/file output.
-	for _, e := range errs {
-		fmt.Fprintf(os.Stderr, "warn: %v\n", e)
-	}
-
-	out := scraper.NewScrapeOutput(urls, *selector, *workers, results, errs)
-
-	if err := writeOutput(*output, out); err != nil {
-		fmt.Fprintf(os.Stderr, "error writing output: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Confirm save location when writing to a file (not stdout).
-	if *output != "" {
-		fmt.Fprintf(os.Stderr, "saved %d result(s) to %s\n", len(results), *output)
+	if err := rootCmd.Execute(); err != nil {
+		ui.Fatal(err.Error())
 	}
 }
 
+// --- shared helpers used by multiple commands ---
+
 // readURLs reads a file and returns non-empty, non-comment lines as URLs.
-// It strips a leading UTF-8 BOM if present (written by some Windows editors).
+// Strips a leading UTF-8 BOM written by some Windows editors.
 func readURLs(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -105,8 +92,7 @@ func readURLs(path string) ([]string, error) {
 	return urls, sc.Err()
 }
 
-// writeOutput writes the ScrapeOutput as indented JSON.
-// If path is empty it writes to stdout; otherwise it delegates to SaveJSON.
+// writeOutput writes a ScrapeOutput as indented JSON to a file or stdout.
 func writeOutput(path string, out scraper.ScrapeOutput) error {
 	if path != "" {
 		return out.SaveJSON(path)
@@ -115,3 +101,6 @@ func writeOutput(path string, out scraper.ScrapeOutput) error {
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)
 }
+
+// printVersion is used by --version (cobra handles this automatically).
+var _ = fmt.Sprintf // keep fmt imported
