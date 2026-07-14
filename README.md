@@ -1,4 +1,4 @@
-# 🕸️ Web Scraper Using GO
+# 🕸️ Web Scraper 
 
 
 <img width="930" height="786" alt="Web Scraper UI" src="https://github.com/user-attachments/assets/499bf87c-6045-49b7-8bcd-997730185caa" />
